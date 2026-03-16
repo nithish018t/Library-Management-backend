@@ -1,0 +1,102 @@
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    full_name VARCHAR(120) NOT NULL DEFAULT '',
+    registration_no VARCHAR(50) NOT NULL UNIQUE,
+    password_plain VARCHAR(100) NOT NULL,
+    date_of_birth DATE NOT NULL,
+    gender VARCHAR(20) NOT NULL DEFAULT 'Male',
+    btech_branch VARCHAR(80) NOT NULL DEFAULT 'CSE',
+    academic_year INT NOT NULL DEFAULT 1,
+    semester INT NOT NULL DEFAULT 1,
+    spent_hours DECIMAL(10,2) NOT NULL DEFAULT 0,
+    books_taken INT NOT NULL DEFAULT 0,
+    nearest_deadline DATE NULL,
+    fine_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'full_name');
+SET @ddl := IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN full_name VARCHAR(120) NOT NULL DEFAULT ''Unknown''', 'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'gender');
+SET @ddl := IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN gender VARCHAR(20) NOT NULL DEFAULT ''Male''', 'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'btech_branch');
+SET @ddl := IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN btech_branch VARCHAR(80) NOT NULL DEFAULT ''CSE''', 'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'academic_year');
+SET @ddl := IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN academic_year INT NOT NULL DEFAULT 1', 'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'semester');
+SET @ddl := IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN semester INT NOT NULL DEFAULT 1', 'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'spent_hours');
+SET @ddl := IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN spent_hours DECIMAL(10,2) NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'books_taken');
+SET @ddl := IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN books_taken INT NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'nearest_deadline');
+SET @ddl := IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN nearest_deadline DATE NULL', 'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'fine_amount');
+SET @ddl := IF(@col_exists = 0, 'ALTER TABLE users ADD COLUMN fine_amount DECIMAL(10,2) NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+CREATE TABLE IF NOT EXISTS resources (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    academic_year INT NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    resource_type VARCHAR(100) NOT NULL,
+    resource_url VARCHAR(500) NOT NULL,
+    description VARCHAR(400) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS time_spend_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    spent_seconds INT NOT NULL,
+    logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_time_user_date (user_id, logged_at),
+    CONSTRAINT fk_time_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS borrow_events (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    book_barcode VARCHAR(80) NULL,
+    book_title VARCHAR(220) NOT NULL,
+    borrowed_at DATE NOT NULL,
+    due_date DATE NOT NULL,
+    returned_at DATE NULL,
+    INDEX idx_borrow_user_date (user_id, borrowed_at),
+    INDEX idx_borrow_user_barcode (user_id, book_barcode),
+    CONSTRAINT fk_borrow_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'borrow_events' AND COLUMN_NAME = 'book_barcode');
+SET @ddl := IF(@col_exists = 0, 'ALTER TABLE borrow_events ADD COLUMN book_barcode VARCHAR(80) NULL', 'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+CREATE TABLE IF NOT EXISTS book_catalog (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    barcode VARCHAR(80) NOT NULL UNIQUE,
+    title VARCHAR(220) NOT NULL,
+    author VARCHAR(150) NOT NULL,
+    isbn VARCHAR(32) NOT NULL,
+    publisher VARCHAR(120) NOT NULL,
+    shelf_location VARCHAR(60) NOT NULL,
+    total_copies INT NOT NULL DEFAULT 1,
+    available_copies INT NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
