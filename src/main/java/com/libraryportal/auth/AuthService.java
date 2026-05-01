@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.sql.Date;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -359,7 +360,14 @@ public class AuthService {
         );
 
         jdbcTemplate.update(
-                "UPDATE book_catalog SET available_copies = GREATEST(available_copies - 1, 0) WHERE barcode = ?",
+                """
+                UPDATE book_catalog
+                SET available_copies = CASE
+                    WHEN available_copies > 0 THEN available_copies - 1
+                    ELSE 0
+                END
+                WHERE barcode = ?
+                """,
                 barcode
         );
         return getDashboardByUserId(userId);
@@ -399,7 +407,10 @@ public class AuthService {
         jdbcTemplate.update(
                 """
                 UPDATE book_catalog
-                SET available_copies = LEAST(available_copies + 1, total_copies)
+                SET available_copies = CASE
+                    WHEN available_copies < total_copies THEN available_copies + 1
+                    ELSE total_copies
+                END
                 WHERE barcode = ?
                 """,
                 barcode
@@ -517,32 +528,41 @@ public class AuthService {
     }
 
     private BigDecimal fetchCurrentFine(int userId) {
-        BigDecimal fine = jdbcTemplate.queryForObject(
+        List<Date> overdueDates = jdbcTemplate.query(
                 """
-                SELECT COALESCE(SUM(
-                    CASE
-                        WHEN returned_at IS NULL AND due_date < CURDATE() THEN DATEDIFF(CURDATE(), due_date) * 2
-                        ELSE 0
-                    END
-                ), 0)
+                SELECT due_date
                 FROM borrow_events
-                WHERE user_id = ?
+                WHERE user_id = ? AND returned_at IS NULL AND due_date < ?
                 """,
-                BigDecimal.class,
-                userId
+                (rs, rowNum) -> rs.getDate("due_date"),
+                userId,
+                Date.valueOf(LocalDate.now())
         );
-        return fine == null ? BigDecimal.ZERO : fine;
+
+        BigDecimal fine = BigDecimal.ZERO;
+        LocalDate today = LocalDate.now();
+        for (Date dueDate : overdueDates) {
+            if (dueDate == null) {
+                continue;
+            }
+            long daysOverdue = ChronoUnit.DAYS.between(dueDate.toLocalDate(), today);
+            if (daysOverdue > 0) {
+                fine = fine.add(BigDecimal.valueOf(daysOverdue * 2L));
+            }
+        }
+        return fine;
     }
 
     private List<Double> fetchWeeklyHours(int userId) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """
-                SELECT DATE(logged_at) AS day_key, COALESCE(SUM(spent_seconds), 0) AS sec_sum
+                SELECT CAST(logged_at AS DATE) AS day_key, COALESCE(SUM(spent_seconds), 0) AS sec_sum
                 FROM time_spend_logs
-                WHERE user_id = ? AND logged_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-                GROUP BY DATE(logged_at)
+                WHERE user_id = ? AND logged_at >= ?
+                GROUP BY CAST(logged_at AS DATE)
                 """,
-                userId
+                userId,
+                Date.valueOf(LocalDate.now().minusDays(6))
         );
 
         Map<LocalDate, Double> byDate = new HashMap<>();
@@ -564,23 +584,22 @@ public class AuthService {
 
     private List<Integer> fetchMonthlyBorrows(int userId) {
         LocalDate start = LocalDate.now().minusMonths(5).withDayOfMonth(1);
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+        List<Date> rows = jdbcTemplate.query(
                 """
-                SELECT DATE_FORMAT(borrowed_at, '%Y-%m') AS month_key, COUNT(*) AS cnt
+                SELECT borrowed_at
                 FROM borrow_events
                 WHERE user_id = ? AND borrowed_at >= ?
-                GROUP BY DATE_FORMAT(borrowed_at, '%Y-%m')
                 """,
+                (rs, rowNum) -> rs.getDate("borrowed_at"),
                 userId,
                 Date.valueOf(start)
         );
 
         Map<String, Integer> byMonth = new HashMap<>();
-        for (Map<String, Object> row : rows) {
-            String month = (String) row.get("month_key");
-            Number cnt = (Number) row.get("cnt");
-            if (month != null && cnt != null) {
-                byMonth.put(month, cnt.intValue());
+        for (Date borrowedAt : rows) {
+            if (borrowedAt != null) {
+                String month = YearMonth.from(borrowedAt.toLocalDate()).toString();
+                byMonth.merge(month, 1, Integer::sum);
             }
         }
 
